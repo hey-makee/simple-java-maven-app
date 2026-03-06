@@ -1,28 +1,44 @@
 pipeline {
     agent any
-    options {
-        skipStagesAfterUnstable()
+
+    // Step 1: Inject the tools we configured in the Jenkins UI
+    tools {
+        maven 'Maven3'
+        jdk 'JDK11'
     }
+
     stages {
-        stage('Build') {
+        stage('Checkout') {
             steps {
-                sh 'mvn -B -DskipTests clean package'
+                echo "Pulling the latest code from GitHub..."
+                checkout scm
             }
         }
-        stage('Test') {
+
+        stage('Build & Test') {
             steps {
-                sh 'mvn test'
+                echo "Running Maven to clean the workspace, compile code, and run tests..."
+                // The -B flag runs Maven in 'Batch' mode, which makes the Jenkins logs much cleaner to read.
+                // The -DskipTests=false ensures tests are run.
+                sh 'mvn -B -DskipTests=false clean package'
             }
             post {
+                // If tests fail, Jenkins can still save the test reports so developers can see what broke
                 always {
                     junit 'target/surefire-reports/*.xml'
                 }
             }
         }
-        stage('Deliver') { 
-            steps {
-                sh './jenkins/scripts/deliver.sh' 
-            }
+    }
+
+    post {
+        success {
+            echo "Build successful! Archiving the final Artifact..."
+            // Grab the finished .jar file and save it to the Jenkins dashboard
+            archiveArtifacts artifacts: 'target/*.jar', followSymlinks: false
+        }
+        failure {
+            echo "The build failed. Please review the logs."
         }
     }
 }
